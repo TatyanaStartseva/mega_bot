@@ -3,7 +3,7 @@ import functools
 import json
 from datetime import datetime, timedelta
 from asyncio import create_task, sleep
-import  aiohttp
+import aiohttp
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import (
@@ -155,6 +155,7 @@ async def _clear_keyboard(bot, chat_id, message_id, add_markup=None):
         chat_id=chat_id, message_id=message_id, reply_markup=add_markup
     )
 
+
 async def _send_expiring_notification(message: Message, l10n: FluentLocalization):
     """
     Отправляет "самоуничтожающееся" через 5 секунд сообщение
@@ -168,38 +169,44 @@ async def _send_expiring_notification(message: Message, l10n: FluentLocalization
         await msg.delete()
 
 
-async def _send_video_to_user(bot, chat_id, video_link, inline_keyboard ):
+async def _send_video_to_user(bot, chat_id, video_link, inline_keyboard):
     try:
         async with aiohttp.ClientSession() as session:
-                async with session.get(video_link) as response:
-                    video_bytes = await response.read()
-                    if inline_keyboard is not None:
-                        sent_message = await bot.send_video(chat_id, video=types.BufferedInputFile(file=video_bytes,
-                                                                                                   filename='video.mp4'),
-                                                            reply_markup=inline_keyboard)
-                    else:
-                        sent_message = await bot.send_video(chat_id, video=types.BufferedInputFile(file=video_bytes,
-                                                                                                   filename='video.mp4'))
+            async with session.get(video_link) as response:
+                video_bytes = await response.read()
+                if inline_keyboard is not None:
+                    sent_message = await bot.send_video(
+                        chat_id,
+                        video=types.BufferedInputFile(
+                            file=video_bytes, filename="video.mp4"
+                        ),
+                        reply_markup=inline_keyboard,
+                    )
+                else:
+                    sent_message = await bot.send_video(
+                        chat_id,
+                        video=types.BufferedInputFile(
+                            file=video_bytes, filename="video.mp4"
+                        ),
+                    )
         return sent_message.message_id
     except Exception as e:
         print("Ошибка отправки видео:", e)
         return None
+
+
 import asyncio
+
 
 async def _automatic_transition(callback_query, bot, l10n, status, timeout):
     try:
         await asyncio.sleep(timeout)
         user_DB = ChatBotDBAPI().get_document_by_id(callback_query.message.chat.id)
-        if (
-            not user_DB
-            or "status" not in user_DB
-            or user_DB["status"] is None
-            or user_DB["status"] != status
-        ):
-            return
+
         await handle_callback_query(callback_query, bot, l10n)
     except Exception as e:
         print("Error in automatic transition:", e)
+
 
 @router.message(Command(commands=["start"]))
 async def cmd_start(message: Message, bot: Bot, l10n: FluentLocalization):
@@ -221,27 +228,30 @@ async def cmd_start(message: Message, bot: Bot, l10n: FluentLocalization):
     user_DB = ChatBotDBAPI().get_document_by_id(user.id)
     if not user_DB or "topic_id" not in user_DB or user_DB["topic_id"] is None:
         topic = await bot.create_forum_topic(
-                config.admin_chat_id,
-                user.full_name,
-                icon_custom_emoji_id=5357121491508928442,
-            )
+            config.admin_chat_id,
+            user.full_name,
+            icon_custom_emoji_id=5357121491508928442,
+        )
         user_data["topic_id"] = topic.message_thread_id
         user_data["link"] = (
-                f"https://t.me/c/{str(config.admin_chat_id).replace('-100', '')}/{topic.message_thread_id}"
-            )
+            f"https://t.me/c/{str(config.admin_chat_id).replace('-100', '')}/{topic.message_thread_id}"
+        )
         ChatBotDBAPI().add_or_update_document(user_data)
-    with open('setup.json', 'r') as file:
+    with open("setup.json", "r") as file:
         setup_data = json.load(file)
-    step = setup_data['steps'][0]
-    automatic_step = step['automatic_step']
-    if step.get('button', False):
-        inline_keyboard_status= _inline_keyboard_status({"status":1}, step['button'] if isinstance(step['button'], str) else None)
+    step = setup_data["steps"][0]
+    automatic_step = step["automatic_step"]
+    user_data["link"] = user_DB["link"]
+    if step.get("button", False):
+        inline_keyboard_status = _inline_keyboard_status(
+            {"status": 1}, step["button"] if isinstance(step["button"], str) else None
+        )
     else:
         inline_keyboard_status = None
-    for stage_key, stage_value in step['type'].items():
-        if 'text' in stage_key:
+    for stage_key, stage_value in step["type"].items():
+        if "text" in stage_key:
             await message.answer(stage_value)
-        elif 'video' in stage_key:
+        elif "video" in stage_key:
             video_id = await _send_video_to_user(
                 bot, message.chat.id, stage_value, inline_keyboard_status
             )
@@ -256,21 +266,27 @@ async def cmd_start(message: Message, bot: Bot, l10n: FluentLocalization):
                     )
                 )
     if user.username:
-        await bot.send_message(config.admin_chat_id, l10n.format_value("comminicate_start", user_data), reply_to_message_id=user_DB['topic_id'],)
+        await bot.send_message(
+            config.admin_chat_id,
+            l10n.format_value("comminicate_start", user_data),
+            reply_to_message_id=user_DB["topic_id"],
+        )
         await bot.send_message(
             config.admin_chat_id,
             l10n.format_value("funnel_started_general", user_data),
             parse_mode="HTML",
         )
     else:
-        await bot.send_message(config.admin_chat_id, l10n.format_value("comminicate_start", user_data),
-                               reply_to_message_id=user_DB['topic_id'], )
         await bot.send_message(
             config.admin_chat_id,
-            l10n.format_value(
-                "funnel_started_without_username", user_data
-            ),
+            l10n.format_value("comminicate_start", user_data),
+            reply_to_message_id=user_DB["topic_id"],
         )
+        await bot.send_message(
+            config.admin_chat_id,
+            l10n.format_value("funnel_started_without_username", user_data),
+        )
+
 
 @router.callback_query()
 async def handle_callback_query(
@@ -294,190 +310,218 @@ async def handle_callback_query(
             "date": date,
             "time": time,
         }
-        with open('setup.json', 'r') as file:
+        with open("setup.json", "r") as file:
             setup_data = json.load(file)
-        steps = len(setup_data['steps'])
+        steps = len(setup_data["steps"])
         if isinstance(status, int):
-            if  status < steps :
+            if status < steps:
                 ChatBotDBAPI().add_or_update_document(user_data)
                 user_DB = ChatBotDBAPI().get_document_by_id(user.id)
                 user_data["link"] = user_DB["link"]
-                step = setup_data['steps'][status]
-                if setup_data['steps'][status-1].get('button'):
+                step = setup_data["steps"][status]
+                if setup_data["steps"][status - 1].get("button"):
                     await _clear_keyboard(bot, chat_id, message_id)
-                for stage_key, stage_value in step['type'].items():
-                        if 'text' in stage_key:
-                            await bot.send_message(
-                                chat_id,
-                                stage_value,
-                            )
-                        if 'video' in stage_key:
-                            if step.get('button', False) or isinstance(step, str):
-                                inline_keyboard_status = _inline_keyboard_status({"status": status + 1},
-                                                                                 step.get('button') if isinstance(
-                                                                                     step.get('button'),
-                                                                                     str) else None)
-                            else:
-                                inline_keyboard_status = None
-                            video_id = await _send_video_to_user(
-                                bot, chat_id, stage_value, inline_keyboard_status
-                            )
-                            if step.get('automatic_step') is not None:
-                                create_task(
-                                    _automatic_transition(
-                                        ChatMessage(str({"status": status+1}), chat_id, video_id),
-                                        bot,
-                                        l10n,
-                                        status,
-                                        step['automatic_step'],
-                                    )
-                                )
-                        if 'website' in stage_key:
-                            botton_value = [[InlineKeyboardButton(text=stage_value[0], url=stage_value[1])]]
-                            keyboard = InlineKeyboardMarkup(inline_keyboard=botton_value)
-                            await bot.send_message(chat_id, text=stage_value[2], reply_markup=keyboard)
-                            if step.get('automatic_step') is not None:
-                                create_task(
-                                    _automatic_transition(
-                                        ChatMessage(str({"status": status+1}), chat_id, stage_value[1]),
-                                        bot,
-                                        l10n,
-                                        status,
-                                        step['automatic_step'],
-                                    )
-                                )
-
-                        if 'zoomcall' in stage_key:
-                            user_DB = ChatBotDBAPI().get_document_by_id(user.id)
-                            user_data["link"] = user_DB["link"]
-                            if user.username:
-                                await bot.send_message(config.admin_chat_id, l10n.format_value("funnel_final_mini", user_data),reply_to_message_id=user_DB['topic_id'],)
-                                await bot.send_message(
-                                    config.admin_chat_id,
-                                    l10n.format_value("funnel_final", user_data),
-                                    parse_mode="HTML",
-                                )
-                            else:
-                                await bot.send_message(config.admin_chat_id,
-                                                       l10n.format_value("funnel_final_mini", user_data),
-                                                       reply_to_message_id=user_DB['topic_id'], )
-                                await bot.send_message(
-                                    config.admin_chat_id,
-                                    l10n.format_value("funnel_final_without_username", user_data),
-                                    parse_mode="HTML",
-                                )
-                            ChatBotDBAPI().add_or_update_document(user_data)
-                            await bot.send_message(
-                                chat_id,
-                                l10n.format_value("intro_final"),
-                                reply_markup=_inline_keyboard_status(
-                                    {"status": "final"}, "ЗАПИСАТЬСЯ НА ВСТРЕЧУ"
+                for stage_key, stage_value in step["type"].items():
+                    if "text" in stage_key:
+                        await bot.send_message(
+                            chat_id,
+                            stage_value,
+                        )
+                    if "video" in stage_key:
+                        if step.get("button", False) or isinstance(step, str):
+                            inline_keyboard_status = _inline_keyboard_status(
+                                {"status": status + 1},
+                                (
+                                    step.get("button")
+                                    if isinstance(step.get("button"), str)
+                                    else None
                                 ),
                             )
-                            if step.get('automatic_step') is not None:
-                                create_task(
-                                    _automatic_transition(
-                                        ChatMessage(str({"status": status+1}), chat_id, video_id),
-                                        bot,
-                                        l10n,
-                                        status,
-                                        step['automatic_step'],
-                                    )
+                        else:
+                            inline_keyboard_status = None
+                        video_id = await _send_video_to_user(
+                            bot, chat_id, stage_value, inline_keyboard_status
+                        )
+                        if step.get("automatic_step") is not None:
+                            create_task(
+                                _automatic_transition(
+                                    ChatMessage(
+                                        str({"status": status + 1}), chat_id, video_id
+                                    ),
+                                    bot,
+                                    l10n,
+                                    status,
+                                    step["automatic_step"],
                                 )
+                            )
+                    if "website" in stage_key:
+                        botton_value = [
+                            [
+                                InlineKeyboardButton(
+                                    text=stage_value[0], url=stage_value[1]
+                                )
+                            ]
+                        ]
+                        keyboard = InlineKeyboardMarkup(inline_keyboard=botton_value)
+                        await bot.send_message(
+                            chat_id, text=stage_value[2], reply_markup=keyboard
+                        )
+                        if step.get("automatic_step") is not None:
+                            create_task(
+                                _automatic_transition(
+                                    ChatMessage(
+                                        str({"status": status + 1}),
+                                        chat_id,
+                                        stage_value[1],
+                                    ),
+                                    bot,
+                                    l10n,
+                                    status,
+                                    step["automatic_step"],
+                                )
+                            )
+
+                    if "zoomcall" in stage_key:
+                        user_DB = ChatBotDBAPI().get_document_by_id(user.id)
+                        user_data["link"] = user_DB["link"]
+                        if user.username:
+                            await bot.send_message(
+                                config.admin_chat_id,
+                                l10n.format_value("funnel_final_mini", user_data),
+                                reply_to_message_id=user_DB["topic_id"],
+                            )
+                            await bot.send_message(
+                                config.admin_chat_id,
+                                l10n.format_value("funnel_final", user_data),
+                                parse_mode="HTML",
+                            )
+                        else:
+                            await bot.send_message(
+                                config.admin_chat_id,
+                                l10n.format_value("funnel_final_mini", user_data),
+                                reply_to_message_id=user_DB["topic_id"],
+                            )
+                            await bot.send_message(
+                                config.admin_chat_id,
+                                l10n.format_value(
+                                    "funnel_final_without_username", user_data
+                                ),
+                                parse_mode="HTML",
+                            )
+                        ChatBotDBAPI().add_or_update_document(user_data)
+                        await bot.send_message(
+                            chat_id,
+                            l10n.format_value("intro_final"),
+                            reply_markup=_inline_keyboard_status(
+                                {"status": "final"}, "ЗАПИСАТЬСЯ НА ВСТРЕЧУ"
+                            ),
+                        )
+                        if step.get("automatic_step") is not None:
+                            create_task(
+                                _automatic_transition(
+                                    ChatMessage(
+                                        str({"status": status + 1}), chat_id, video_id
+                                    ),
+                                    bot,
+                                    l10n,
+                                    status,
+                                    step["automatic_step"],
+                                )
+                            )
 
         if isinstance(status, str):
-                ChatBotDBAPI().add_or_update_document(user_data)
-                await _clear_keyboard(bot, chat_id, message_id)
-                if not date:
+            ChatBotDBAPI().add_or_update_document(user_data)
+            await _clear_keyboard(bot, chat_id, message_id)
+            if not date:
+                await bot.send_message(
+                    chat_id,
+                    l10n.format_value("camminicate_call_date"),
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=_generate_date_picker()
+                    ),
+                )
+            elif not time:
+                user_DB = ChatBotDBAPI().get_document_by_id(user.id)
+                user_data["link"] = user_DB["link"]
+                await bot.send_message(
+                    config.admin_chat_id,
+                    l10n.format_value("comminicate_call_started_mini", user_data),
+                    reply_to_message_id=user_DB["topic_id"],
+                )
+                if user.username:
                     await bot.send_message(
-                        chat_id,
-                        l10n.format_value("camminicate_call_date"),
-                        reply_markup=InlineKeyboardMarkup(
-                            inline_keyboard=_generate_date_picker()
+                        config.admin_chat_id,
+                        l10n.format_value("comminicate_call_started", user_data),
+                        parse_mode="HTML",
+                    )
+                else:
+                    await bot.send_message(
+                        config.admin_chat_id,
+                        l10n.format_value(
+                            "comminicate_call_started_without_username", user_data
                         ),
                     )
-                elif not time:
-                    user_DB = ChatBotDBAPI().get_document_by_id(user.id)
-                    user_data["link"] = user_DB["link"]
+                try:
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=l10n.format_value("camminicate_call_time"),
+                    )
+                except Exception as e:
+                    print(e)
+                await _clear_keyboard(
+                    bot,
+                    chat_id,
+                    message_id,
+                    InlineKeyboardMarkup(inline_keyboard=_generate_time_sub_menu(date)),
+                )
+                try:
+                    await bot.edit_forum_topic(
+                        config.admin_chat_id,
+                        message_thread_id=user_DB["topic_id"],
+                        icon_custom_emoji_id="5433614043006903194",
+                    )
+                except Exception as e:
+                    print(e)
+            else:
+                user_DB = ChatBotDBAPI().get_document_by_id(user.id)
+                user_data["link"] = user_DB["link"]
+                await bot.send_message(
+                    config.admin_chat_id,
+                    l10n.format_value("comminicate_call_final_mini", user_data),
+                    reply_to_message_id=user_DB["topic_id"],
+                )
+                if user.username:
                     await bot.send_message(
                         config.admin_chat_id,
-                        l10n.format_value("comminicate_call_started_mini", user_data),
-                        reply_to_message_id=user_DB["topic_id"],
+                        l10n.format_value("comminicate_call_final", user_data),
+                        parse_mode="HTML",
                     )
-                    if user.username:
-                        await bot.send_message(
-                            config.admin_chat_id,
-                            l10n.format_value("comminicate_call_started", user_data),
-                            parse_mode="HTML",
-                        )
-                    else:
-                        await bot.send_message(
-                            config.admin_chat_id,
-                            l10n.format_value(
-                                "comminicate_call_started_without_username", user_data
-                            ),
-                        )
-                    try:
-                        await bot.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            text=l10n.format_value("camminicate_call_time"),
-                        )
-                    except Exception as e:
-                        print(e)
-                    await _clear_keyboard(
-                        bot,
-                        chat_id,
-                        message_id,
-                        InlineKeyboardMarkup(inline_keyboard=_generate_time_sub_menu(date)),
-                    )
-                    try:
-                        await bot.edit_forum_topic(
-                            config.admin_chat_id,
-                            message_thread_id=user_DB["topic_id"],
-                            icon_custom_emoji_id="5433614043006903194",
-                        )
-                    except Exception as e:
-                        print(e)
                 else:
-                    user_DB = ChatBotDBAPI().get_document_by_id(user.id)
-                    user_data["link"] = user_DB["link"]
                     await bot.send_message(
                         config.admin_chat_id,
-                        l10n.format_value("comminicate_call_final_mini", user_data),
-                        reply_to_message_id=user_DB["topic_id"],
+                        l10n.format_value(
+                            "comminicate_call_final_without_username", user_data
+                        ),
                     )
-                    if user.username:
-                        await bot.send_message(
-                            config.admin_chat_id,
-                            l10n.format_value("comminicate_call_final", user_data),
-                            parse_mode="HTML",
-                        )
-                    else:
-                        await bot.send_message(
-                            config.admin_chat_id,
-                            l10n.format_value(
-                                "comminicate_call_final_without_username", user_data
-                            ),
-                        )
-                    try:
-                        await bot.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            text=l10n.format_value(
-                                "camminicate_call_finish", {"date": date, "time": time}
-                            ),
-                        )
-                    except Exception as e:
-                        print(e)
-                    try:
-                        await bot.edit_forum_topic(
-                            config.admin_chat_id,
-                            message_thread_id=user_DB["topic_id"],
-                            icon_custom_emoji_id="5377544228505134960",
-                        )
-                    except Exception as e:
-                        print(e)
+                try:
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=l10n.format_value(
+                            "camminicate_call_finish", {"date": date, "time": time}
+                        ),
+                    )
+                except Exception as e:
+                    print(e)
+                try:
+                    await bot.edit_forum_topic(
+                        config.admin_chat_id,
+                        message_thread_id=user_DB["topic_id"],
+                        icon_custom_emoji_id="5377544228505134960",
+                    )
+                except Exception as e:
+                    print(e)
     except Exception as e:
         print("Error:", e)
 
